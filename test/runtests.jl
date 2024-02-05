@@ -23,6 +23,8 @@ function check_resolved(s)
     [(refof(i) !== nothing) for i in IDs]
 end
 
+include(joinpath(@__DIR__, "rai_rules_tests.jl"))
+
 @testset "StaticLint" begin
 
     @testset "Basic bindings" begin

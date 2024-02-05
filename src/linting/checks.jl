@@ -115,6 +115,7 @@ function check_all(x::EXPR, opts::LintOptions, env::ExternalEnv)
     check_use_of_literal(x)
     check_break_continue(x)
     check_const(x)
+    check_async(x)
 
     if x.args !== nothing
         for i in 1:length(x.args)
@@ -918,6 +919,10 @@ function check_kw_default(x::EXPR, env::ExternalEnv)
 
         end
     end
+end
+
+function check_async(x::EXPR)
+
 end
 
 function check_use_of_literal(x::EXPR)
