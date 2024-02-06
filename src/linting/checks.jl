@@ -33,6 +33,8 @@
     IndexFromLength,
     FileTooBig,
     FileNotAvailable,
+    ProhibitedAsyncMacro,
+    ProhibitedNThreads,
 )
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
@@ -66,7 +68,9 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     IncludePathContainsNULL => "Cannot include file, path contains NULL characters.",
     IndexFromLength => "Indexing with indices obtained from `length`, `size` etc is discouraged. Use `eachindex` or `axes` instead.",
     FileTooBig => "File too big, not following include.",
-    FileNotAvailable => "File not available."
+    FileNotAvailable => "File not available.",
+    ProhibitedAsyncMacro => "Macro @spawn should be used instead of @async.",
+    ProhibitedNThreads => "Threads.nthreads() should not be used.",
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -79,7 +83,7 @@ function seterror!(x::EXPR, e)
     x.meta.error = e
 end
 
-const default_options = (true, true, true, true, true, true, true, true, true, true)
+const default_options = (true, true, true, true, true, true, true, true, true, true, true)
 
 struct LintOptions
     call::Bool
@@ -92,6 +96,7 @@ struct LintOptions
     modname::Bool
     pirates::Bool
     useoffuncargs::Bool
+    extended::Bool
 end
 LintOptions() = LintOptions(default_options...)
 LintOptions(::Colon) = LintOptions(fill(true, length(default_options))...)
@@ -115,7 +120,11 @@ function check_all(x::EXPR, opts::LintOptions, env::ExternalEnv)
     check_use_of_literal(x)
     check_break_continue(x)
     check_const(x)
-    check_async(x)
+
+    if opts.extended
+        check_async(x)
+        check_nthreads(x)
+    end
 
     if x.args !== nothing
         for i in 1:length(x.args)
@@ -124,6 +133,30 @@ function check_all(x::EXPR, opts::LintOptions, env::ExternalEnv)
     end
 end
 
+function is_hole_variable(x::CSTParser.EXPR)
+    return x.head == :IDENTIFIER && x.val == "hole_variable"
+end
+
+comp(x, y) = x == y
+function comp(x::CSTParser.EXPR, y::CSTParser.EXPR)
+    (is_hole_variable(x) || is_hole_variable(y)) && return true
+    return comp(x.head, y.head) &&
+        x.val == y.val &&
+        length(x) == length(y) &&
+        all(comp(x[i], y[i]) for i = 1:length(x))
+end
+
+const check_cache = Dict{String, CSTParser.EXPR}()
+function generic_check(x::EXPR, template_code::String, error_value)
+    get!(check_cache, template_code, CSTParser.parse(template_code))
+    oracle = check_cache[template_code]
+    if comp(x, oracle)
+        seterror!(x, error_value)
+    end
+end
+
+check_async(x::EXPR) = generic_check(x, "@async hole_variable", ProhibitedAsyncMacro)
+check_nthreads(x::EXPR) = generic_check(x, "Threads.nthreads()", ProhibitedNThreads)
 
 function _typeof(x, state)
     if x isa EXPR
@@ -919,10 +952,6 @@ function check_kw_default(x::EXPR, env::ExternalEnv)
 
         end
     end
-end
-
-function check_async(x::EXPR)
-
 end
 
 function check_use_of_literal(x::EXPR)
