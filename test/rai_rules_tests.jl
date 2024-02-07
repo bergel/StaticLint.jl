@@ -1,4 +1,5 @@
-using StaticLint: run_lint_on_text, comp
+using StaticLint: run_lint_on_text, comp, convert_offset_to_line,
+    convert_offset_to_line_from_lines
 import CSTParser
 using Test
 
@@ -26,7 +27,7 @@ end
     source = "1 + 2 \n 1 + 10 \n true || true\n10"
     @test lint_has_error_test(source)
     @test lint_test(source,
-        "Line 3, column 3: The first argument of a `||` call is a boolean literal. at offset 17 of")
+        "Line 3, column 1: The first argument of a `||` call is a boolean literal. at offset 17 of")
 end
 
 @testset "forbidden macros" begin
@@ -38,7 +39,92 @@ end
             """
         @test lint_has_error_test(source)
         @test lint_test(source,
-            "Line 2, column 5: Macro @spawn should be used instead of @async.")
+            "Line 2, column 4: Macro @spawn should be used instead of @async.")
+    end
+
+    @testset "Locally disabling lint" begin
+        @testset "lint-disable-lint" begin
+            @test !lint_has_error_test("""
+                function f()
+                    @async 1 + 2 # lint-disable-line
+                end
+                """)
+            @test !lint_has_error_test("""
+                function f()
+                    @async 1 + 2 #lint-disable-line
+                end
+                """)
+
+            @test !lint_has_error_test("""
+                function f()
+                    @async 1 + 2 #  lint-disable-line
+                end
+                """)
+
+            @test lint_has_error_test("""
+                function f()
+                    @async 1 + 2 #  lint-disable-line
+                    @async 1 + 3
+                end
+                """)
+        end
+        @testset "lint-disable-next-line" begin
+            @test !lint_has_error_test("""
+                function f()
+                    # lint-disable-next-line
+                    @async 1 + 2
+                end
+                """)
+            @test !lint_has_error_test("""
+                function f()
+                    # lint-disable-next-line
+                    @async 1 + 2
+                end
+                """)
+
+            @test !lint_has_error_test("""
+                function f()
+                    # lint-disable-next-line
+                    @async 1 + 2
+                end
+                """)
+
+            @test lint_has_error_test("""
+                function f()
+                    # lint-disable-next-line
+                    @async 1 + 2
+
+                    @async 1 + 3
+                end
+                """)
+            @test lint_has_error_test("""
+                function f()
+                    @async 1 + 2
+                    # lint-disable-next-line
+
+                    @async 1 + 3
+                end
+                """)
+            @test lint_has_error_test("""
+                function f()
+                    @async 1 + 2
+                    # lint-disable-next-line
+                    @async 1 + 3
+                end
+                """)
+
+            source = """
+                function f()
+                    # lint-disable-next-line
+                    @async 1 + 2
+
+                    @async 1 + 3
+                end
+                """
+            source_lines = split(source, "\n")
+            @test convert_offset_to_line_from_lines(46, source_lines) == (3, 4, Symbol("lint-disable-line"))
+            @test convert_offset_to_line_from_lines(64, source_lines) == (5, 4, nothing)
+        end
     end
 end
 
@@ -51,19 +137,36 @@ end
             """
         @test lint_has_error_test(source)
         @test lint_test(source,
-            "Line 2, column 12: Threads.nthreads() should not be used.")
+            "Line 2, column 11: Threads.nthreads() should not be used.")
     end
 end
 
 @testset "Comparison" begin
-    @test comp(CSTParser.parse("Threads.nthreads()"), CSTParser.parse("Threads.nthreads()"))
-    @test !comp(CSTParser.parse("QWEThreads.nthreads()"), CSTParser.parse("Threads.nthreads()"))
-    @test !comp(CSTParser.parse("Threads.nthreads()"), CSTParser.parse("QWEThreads.nthreads()"))
+    t(s1, s2) = comp(CSTParser.parse(s1), CSTParser.parse(s2))
+    @test t("Threads.nthreads()", "Threads.nthreads()")
+    @test !t("QWEThreads.nthreads()", "Threads.nthreads()")
+    @test !t("Threads.nthreads()", "QWEThreads.nthreads()")
+    @test !t("Threads.nthreads()", "Threads.qwenthreads()")
 
-    @test comp(CSTParser.parse("1 + 2"), CSTParser.parse("1 + 2"))
-    @test comp(CSTParser.parse("1 + 2"), CSTParser.parse("1 + hole_variable"))
-    @test comp(CSTParser.parse("hole_variable + hole_variable"), CSTParser.parse("1 + hole_variable"))
-    @test comp(CSTParser.parse("hole_variable + 1"), CSTParser.parse("1 + hole_variable"))
+    @test t("1 + 2", "1+2")
+    @test t("1 + 2", "1+hole_variable")
+    @test t("hole_variable + hole_variable", "1 + hole_variable")
+    @test t("hole_variable + 1", "1 + hole_variable")
 
-    @test comp(CSTParser.parse("@async hole_variable"), CSTParser.parse("@async begin 1 + 2 end"))
+    @test t("@async hole_variable", "@async begin 1 + 2 end")
+end
+
+@testset "offset to line" begin
+    source = """
+        function f()
+            return Threads.nthreads()
+        end
+        """
+    @test_throws BoundsError convert_offset_to_line(-1, source)
+    @test_throws BoundsError convert_offset_to_line(length(source) + 2, source)
+
+    @test convert_offset_to_line(10, source) == (1, 10, nothing)
+    @test convert_offset_to_line(20, source) == (2, 7, nothing)
+    @test convert_offset_to_line(43, source) == (2, 30, nothing)
+    @test convert_offset_to_line(47, source) == (3, 4, nothing)
 end
