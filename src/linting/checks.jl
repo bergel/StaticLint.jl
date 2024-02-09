@@ -35,6 +35,7 @@
     FileNotAvailable,
     ProhibitedAsyncMacro,
     ProhibitedNThreads,
+    MissingReference,
 )
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
@@ -71,6 +72,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     FileNotAvailable => "File not available.",
     ProhibitedAsyncMacro => "Macro @spawn should be used instead of @async.",
     ProhibitedNThreads => "Threads.nthreads() should not be used in a constant variable.",
+    MissingReference => "Missing reference",
 )
 
 haserror(m::Meta) = m.error !== nothing

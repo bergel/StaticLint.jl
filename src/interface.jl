@@ -27,7 +27,6 @@ function lint_string(s::String, server = setup_server(); gethints = false, lint_
         for (offset, x) in collect_hints(f.cst, env)
             if haserror(x)
                 push!(hints, (x, LintCodeDescriptions[x.meta.error]))
-            elseif lint_options.missingrefs
                 push!(hints, (x, "Missing reference", " at offset ", offset))
             end
         end
@@ -60,7 +59,6 @@ function lint_file(rootpath, server = setup_server(); gethints = false, lint_opt
             for (offset, x) in collect_hints(f.cst, getenv(f, server))
                 if haserror(x)
                     push!(hints_for_file, (x, string(LintCodeDescriptions[x.meta.error], " at offset ", offset, " of ", p)))
-                elseif lint_options.missingrefs
                     push!(hints_for_file, (x, string("Missing reference", " at offset ", offset, " of ", p)))
                 end
             end
@@ -115,11 +113,29 @@ function convert_offset_to_line_from_lines(offset::Int64, all_lines)
     throw(BoundsError("source", offset))
 end
 
-# Return true if the hint was printed, else it was filtered
-function filter_and_print_hint(hint, io::IO=stdout)
-    hint_as_string = hint[2]
+function should_be_filtered(hint_as_string::String, filters::Vector{LintCodes})
+    return any(o->startswith(hint_as_string, LintCodeDescriptions[o]), filters)
+end
 
+"""
+    filter_and_print_hint(hint, io::IO=stdout, filters::Vector=[])
+
+Essential function to filter and print a `hint_as_string`, being a String.
+Return true if the hint was printed, else it was filtered.
+It takes the following arguments:
+    - `hint_as_string` to be filtered or printed
+    - `io` stream where the hint is printed, if not filtered
+    - `filters` the set of filters to be used
+"""
+function filter_and_print_hint(hint_as_string::String, io::IO=stdout, filters::Vector{LintCodes}=LintCodes[])
+    # Filter along the message
+    should_be_filtered(hint_as_string, filters) && return false
+
+    # Filter along the file content
     ss = split(hint_as_string)
+    has_filename = startswith(last(ss), "/")
+    has_filename || error("Should have a filename")
+
     filename = string(last(ss))
 
     offset_as_string = ss[length(ss) - 2]
@@ -135,6 +151,7 @@ function filter_and_print_hint(hint, io::IO=stdout)
     return false
 end
 
+
 """
     run_lint(rootpath::String; server = global_server, io::IO=stdout, lint_options=essential_options)
 
@@ -144,11 +161,11 @@ Example of use:
     StaticLint.run_lint("foo/bar/myfile.jl")
 
 """
-function run_lint(rootpath::String; server = global_server, io::IO=stdout, lint_options=essential_options)
+function run_lint(rootpath::String; server = global_server, io::IO=stdout, lint_options=essential_options, filters::Vector{LintCodes}=LintCodes[])
     file,hints = StaticLint.lint_file(rootpath, server; gethints = true, lint_options=lint_options)
 
     printstyled(io, "-" ^ 10 * "\n", color=:blue)
-    filtered_and_printed_hints = filter(h->filter_and_print_hint(h, io), hints)
+    filtered_and_printed_hints = filter(h->filter_and_print_hint(h[2], io, filters), hints)
 
     if isempty(filtered_and_printed_hints)
         printstyled(io, "No potential threats were found.\n", color=:green)
@@ -158,11 +175,11 @@ function run_lint(rootpath::String; server = global_server, io::IO=stdout, lint_
     printstyled(io, "-" ^ 10 * "\n", color=:blue)
 end
 
-function run_lint_on_text(source::String; server = global_server, io::IO=stdout, lint_options=essential_options)
+function run_lint_on_text(source::String; server = global_server, io::IO=stdout, lint_options=essential_options, filters::Vector{LintCodes}=LintCodes[])
     tmp_file_name = tempname()
     open(tmp_file_name, "w") do file
         write(file, source)
         flush(file)
-        run_lint(tmp_file_name; server, io, lint_options)
+        run_lint(tmp_file_name; server, io, lint_options, filters)
     end
 end

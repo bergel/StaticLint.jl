@@ -1,5 +1,5 @@
-using StaticLint: run_lint_on_text, comp, convert_offset_to_line,
-    convert_offset_to_line_from_lines
+using StaticLint: StaticLint, run_lint_on_text, comp, convert_offset_to_line,
+    convert_offset_to_line_from_lines, should_be_filtered
 import CSTParser
 using Test
 
@@ -179,4 +179,15 @@ end
     @test convert_offset_to_line(20, source) == (2, 7, nothing)
     @test convert_offset_to_line(43, source) == (2, 30, nothing)
     @test convert_offset_to_line(47, source) == (3, 4, nothing)
+end
+
+@testset "Should be filtered" begin
+    filters = StaticLint.LintCodes[StaticLint.MissingReference, StaticLint.IncorrectCallArgs]
+    hint_as_string1 = "Missing reference at offset 24104 of /Users/alexandrebergel/Documents/RAI/raicode11/src/DataExporter/export_csv.jl"
+    hint_as_string2 = "Line 254, column 19: Possible method call error. at offset 8430 of /Users/alexandrebergel/Documents/RAI/raicode11/src/Compiler/Front/problems.jl"
+    @test should_be_filtered(hint_as_string1, filters)
+    @test !should_be_filtered(hint_as_string2, filters)
+
+    @test should_be_filtered(hint_as_string1, filters)
+    @test !should_be_filtered(hint_as_string2, filters)
 end
