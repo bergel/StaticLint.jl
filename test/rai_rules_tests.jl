@@ -129,15 +129,25 @@ end
 end
 
 @testset "forbidden functions" begin
-    @testset "nthreads()" begin
+    @testset "nthreads() as a const" begin
+        source = """
+            const x = Threads.nthreads()
+            function f()
+                return x
+            end
+            """
+        @test lint_has_error_test(source)
+        @test lint_test(source,
+            "Line 1, column 10: Threads.nthreads() should not be used in a constant variable.")
+    end
+
+    @testset "nthreads() not as a const" begin
         source = """
             function f()
                 return Threads.nthreads()
             end
             """
-        @test lint_has_error_test(source)
-        @test lint_test(source,
-            "Line 2, column 11: Threads.nthreads() should not be used.")
+        @test !lint_has_error_test(source)
     end
 end
 

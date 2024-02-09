@@ -73,7 +73,7 @@ function lint_file(rootpath, server = setup_server(); gethints = false, lint_opt
 end
 
 global global_server = setup_server()
-const essential_options = LintOptions(true, false, true, true, true, true, true, true, true, false, true, false)
+const essential_options = LintOptions(true, false, true, true, true, true, true, true, true, false, true)
 
 # Return (line, column) for a given offset in a source
 function convert_offset_to_line_from_filename(offset::Int64, filename::String)

@@ -70,7 +70,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     FileTooBig => "File too big, not following include.",
     FileNotAvailable => "File not available.",
     ProhibitedAsyncMacro => "Macro @spawn should be used instead of @async.",
-    ProhibitedNThreads => "Threads.nthreads() should not be used.",
+    ProhibitedNThreads => "Threads.nthreads() should not be used in a constant variable.",
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -104,7 +104,11 @@ LintOptions(::Colon) = LintOptions(fill(true, length(default_options))...)
 LintOptions(options::Vararg{Union{Bool,Nothing},length(default_options)}) =
     LintOptions(something.(options, default_options)...)
 
-function check_all(x::EXPR, opts::LintOptions, env::ExternalEnv)
+function check_all(x::EXPR, opts::LintOptions, env::ExternalEnv, markers::Dict{Symbol,Symbol}=Dict{Symbol,Symbol}())
+    if headof(x) === :const
+        markers[:const] = :const
+    end
+
     # Do checks
     opts.call && check_call(x, env)
     opts.iter && check_loop_iter(x, env)
@@ -123,13 +127,17 @@ function check_all(x::EXPR, opts::LintOptions, env::ExternalEnv)
 
     if opts.extended
         check_async(x)
-        check_nthreads(x)
+        check_nthreads(x, markers)
     end
 
     if x.args !== nothing
         for i in 1:length(x.args)
-            check_all(x.args[i], opts, env)
+            check_all(x.args[i], opts, env, markers)
         end
+    end
+
+    if headof(x) === :const
+        delete!(markers, :const)
     end
 end
 
@@ -156,7 +164,10 @@ function generic_check(x::EXPR, template_code::String, error_value)
 end
 
 check_async(x::EXPR) = generic_check(x, "@async hole_variable", ProhibitedAsyncMacro)
-check_nthreads(x::EXPR) = generic_check(x, "Threads.nthreads()", ProhibitedNThreads)
+function check_nthreads(x::EXPR, markers::Dict{Symbol,Symbol})
+    haskey(markers, :const) || return
+    generic_check(x, "Threads.nthreads()", ProhibitedNThreads)
+end
 
 function _typeof(x, state)
     if x isa EXPR
