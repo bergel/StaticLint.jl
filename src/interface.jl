@@ -133,7 +133,7 @@ function filter_and_print_hint(hint_as_string::String, io::IO=stdout, filters::V
 
     # Filter along the file content
     ss = split(hint_as_string)
-    has_filename = startswith(last(ss), "/")
+    has_filename = isfile(last(ss))
     has_filename || error("Should have a filename")
 
     filename = string(last(ss))
@@ -152,6 +152,23 @@ function filter_and_print_hint(hint_as_string::String, io::IO=stdout, filters::V
 end
 
 
+function _run_lint_on_dir(rootpath::String; server = global_server, io::IO=stdout, lint_options=essential_options, filters::Vector{LintCodes}=LintCodes[])
+    for (root, dirs, files) in walkdir(rootpath)
+        for file in files
+            filename = joinpath(root, file)
+            if endswith(filename, ".jl")
+                println("Running lint on file in $filename")
+                run_lint(filename; server, io, lint_options, filters)
+            end
+        end
+
+        for dir in dirs
+            _run_lint_on_dir(joinpath(root, dir); server, io, lint_options, filters)
+        end
+    end
+end
+
+
 """
     run_lint(rootpath::String; server = global_server, io::IO=stdout, lint_options=essential_options)
 
@@ -162,7 +179,14 @@ Example of use:
 
 """
 function run_lint(rootpath::String; server = global_server, io::IO=stdout, lint_options=essential_options, filters::Vector{LintCodes}=LintCodes[])
-    file,hints = StaticLint.lint_file(rootpath, server; gethints = true, lint_options=lint_options)
+    # Did we already analyzed this file? If yes, then exit.
+    rootpath in keys(server.files) && return
+
+    # If we are running Lint on a directory
+    isdir(rootpath) && return _run_lint_on_dir(rootpath; server, io, lint_options, filters)
+
+    # We are running Lint on a Julia file
+    _,hints = StaticLint.lint_file(rootpath, server; gethints = true, lint_options=lint_options)
 
     printstyled(io, "-" ^ 10 * "\n", color=:blue)
     filtered_and_printed_hints = filter(h->filter_and_print_hint(h[2], io, filters), hints)
