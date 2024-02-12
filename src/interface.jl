@@ -139,7 +139,8 @@ function filter_and_print_hint(hint_as_string::String, io::IO=stdout, filters::V
     filename = string(last(ss))
 
     offset_as_string = ss[length(ss) - 2]
-    offset = Base.parse(Int64, offset_as_string)
+    # +1 is because CSTParser gives offset starting at 0.
+    offset = Base.parse(Int64, offset_as_string) + 1
 
     line_number, column, annotation_line = convert_offset_to_line_from_filename(offset, filename)
 

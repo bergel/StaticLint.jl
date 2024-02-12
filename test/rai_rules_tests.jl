@@ -27,7 +27,7 @@ end
     source = "1 + 2 \n 1 + 10 \n true || true\n10"
     @test lint_has_error_test(source)
     @test lint_test(source,
-        "Line 3, column 1: The first argument of a `||` call is a boolean literal. at offset 17 of")
+        "Line 3, column 2: The first argument of a `||` call is a boolean literal. at offset 17 of")
 end
 
 @testset "forbidden macros" begin
@@ -39,7 +39,7 @@ end
             """
         @test lint_has_error_test(source)
         @test lint_test(source,
-            "Line 2, column 4: Macro @spawn should be used instead of @async.")
+            "Line 2, column 5: Macro @spawn should be used instead of @async.")
     end
 
     @testset "Locally disabling lint" begin
@@ -138,7 +138,7 @@ end
             """
         @test lint_has_error_test(source)
         @test lint_test(source,
-            "Line 1, column 10: Threads.nthreads() should not be used in a constant variable.")
+            "Line 1, column 11: Threads.nthreads() should not be used in a constant variable.")
     end
 
     @testset "nthreads() not as a const" begin
