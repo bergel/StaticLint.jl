@@ -14,7 +14,7 @@ Parse a string and run a semantic pass over it. This will mark scopes, bindings,
 references, and lint hints. An annotated `EXPR` is returned or, if `gethints = true`,
 it is paired with a collected list of errors/hints.
 """
-function lint_string(s::String, server = setup_server(); gethints = false, lint_options::LintOptions=LintOptions())
+function lint_string(s::String, server = setup_server(); gethints = false)
     empty!(server.files)
     f = File("", s, CSTParser.parse(s, true), nothing, server)
     env = getenv(f, server)
@@ -45,12 +45,12 @@ in the project will be loaded automatically (calls to `include` with complicated
 are not handled, see `followinclude` for details). A `FileServer` will be returned
 containing the `File`s of the package.
 """
-function lint_file(rootpath, server = setup_server(); gethints = false, lint_options::LintOptions=LintOptions())
+function lint_file(rootpath, server = setup_server(); gethints = false)
     empty!(server.files)
     root = loadfile(server, rootpath)
     semantic_pass(root)
     for f in values(server.files)
-        check_all(f.cst, lint_options, getenv(f, server))
+        check_all(f.cst, essential_options, getenv(f, server))
     end
     if gethints
         hints = []
@@ -117,6 +117,10 @@ function should_be_filtered(hint_as_string::String, filters::Vector{LintCodes})
     return any(o->startswith(hint_as_string, LintCodeDescriptions[o]), filters)
 end
 
+abstract type AbstractFormatter end
+struct PlainFormat <: AbstractFormatter end
+struct MarkdownFormat <: AbstractFormatter end
+
 """
     filter_and_print_hint(hint, io::IO=stdout, filters::Vector=[])
 
@@ -127,7 +131,7 @@ It takes the following arguments:
     - `io` stream where the hint is printed, if not filtered
     - `filters` the set of filters to be used
 """
-function filter_and_print_hint(hint_as_string::String, io::IO=stdout, filters::Vector{LintCodes}=LintCodes[])
+function filter_and_print_hint(hint_as_string::String, io::IO=stdout, filters::Vector{LintCodes}=LintCodes[], formatter::AbstractFormatter=PlainFormat())
     # Filter along the message
     should_be_filtered(hint_as_string, filters) && return false
 
@@ -145,33 +149,67 @@ function filter_and_print_hint(hint_as_string::String, io::IO=stdout, filters::V
     line_number, column, annotation_line = convert_offset_to_line_from_filename(offset, filename)
 
     if isnothing(annotation_line)
-        printstyled(io, "Line $(line_number), column $(column): ", color=:green)
-        println(io, hint_as_string)
+        print_hint(formatter, io, "Line $(line_number), column $(column):", hint_as_string )
         return true
     end
     return false
 end
 
 
-function _run_lint_on_dir(rootpath::String; server = global_server, io::IO=stdout, lint_options=essential_options, filters::Vector{LintCodes}=LintCodes[])
+function _run_lint_on_dir(rootpath::String; server = global_server, io::IO=stdout, filters::Vector{LintCodes}=LintCodes[])
     for (root, dirs, files) in walkdir(rootpath)
         for file in files
             filename = joinpath(root, file)
             if endswith(filename, ".jl")
                 println("Running lint on file in $filename")
-                run_lint(filename; server, io, lint_options, filters)
+                run_lint(filename; server, io, filters)
             end
         end
 
         for dir in dirs
-            _run_lint_on_dir(joinpath(root, dir); server, io, lint_options, filters)
+            _run_lint_on_dir(joinpath(root, dir); server, io, filters)
         end
     end
 end
 
+function print_header(::PlainFormat, io::IO)
+    printstyled(io, "-" ^ 10 * "\n", color=:blue)
+end
+
+function print_hint(::PlainFormat, io::IOBuffer, coordinates::String, hint::String)
+    printstyled(io, coordinates, color=:green)
+    print(io, " ")
+    println(io, hint)
+end
+
+function print_summary(::PlainFormat, io::IO, nb_hints::Int64)
+    if iszero(nb_hints)
+        printstyled(io, "No potential threats were found.\n", color=:green)
+    else
+        printstyled(io, "$(nb_hints) potential threats were found\n", color=:red)
+    end
+end
+
+function print_footer(::PlainFormat, io::IO)
+    printstyled(io, "-" ^ 10 * "\n", color=:blue)
+end
+
+print_header(::MarkdownFormat, io::IO) = nothing
+print_footer(::MarkdownFormat, io::IO) = nothing
+function print_hint(::MarkdownFormat, io::IO, coordinates::String, hint::String)
+    print(io, " - $coordinates $hint\n")
+end
+
+function print_summary(::MarkdownFormat, io::IO, nb_hints::Int64)
+    if iszero(nb_hints)
+        print(io, "No potential threats were found.\n")
+    else
+        print(io, "$(nb_hints) potential threats were found\n")
+    end
+end
 
 """
-    run_lint(rootpath::String; server = global_server, io::IO=stdout, lint_options=essential_options)
+    run_lint(rootpath::String; server = global_server, io::IO=stdout)
 
 Run lint rules on a file `rootpath`, which must be an existing non-folder file.
 Example of use:
@@ -179,32 +217,29 @@ Example of use:
     StaticLint.run_lint("foo/bar/myfile.jl")
 
 """
-function run_lint(rootpath::String; server = global_server, io::IO=stdout, lint_options=essential_options, filters::Vector{LintCodes}=LintCodes[])
+function run_lint(rootpath::String; server = global_server, io::IO=stdout, filters::Vector{LintCodes}=LintCodes[], formatter::AbstractFormatter=PlainFormat())
     # Did we already analyzed this file? If yes, then exit.
     rootpath in keys(server.files) && return
 
     # If we are running Lint on a directory
-    isdir(rootpath) && return _run_lint_on_dir(rootpath; server, io, lint_options, filters)
+    isdir(rootpath) && return _run_lint_on_dir(rootpath; server, io, filters)
 
     # We are running Lint on a Julia file
-    _,hints = StaticLint.lint_file(rootpath, server; gethints = true, lint_options=lint_options)
+    _,hints = StaticLint.lint_file(rootpath, server; gethints = true)
 
-    printstyled(io, "-" ^ 10 * "\n", color=:blue)
-    filtered_and_printed_hints = filter(h->filter_and_print_hint(h[2], io, filters), hints)
+    print_header(formatter, io)
 
-    if isempty(filtered_and_printed_hints)
-        printstyled(io, "No potential threats were found.\n", color=:green)
-    else
-        printstyled(io, "$(length(filtered_and_printed_hints)) potential threats were found\n", color=:red)
-    end
-    printstyled(io, "-" ^ 10 * "\n", color=:blue)
+    filtered_and_printed_hints = filter(h->filter_and_print_hint(h[2], io, filters, formatter), hints)
+
+    print_summary(formatter, io, length(filtered_and_printed_hints))
+    print_footer(formatter, io)
 end
 
-function run_lint_on_text(source::String; server = global_server, io::IO=stdout, lint_options=essential_options, filters::Vector{LintCodes}=LintCodes[])
+function run_lint_on_text(source::String; server = global_server, io::IO=stdout, filters::Vector{LintCodes}=LintCodes[], formatter::AbstractFormatter=PlainFormat())
     tmp_file_name = tempname()
     open(tmp_file_name, "w") do file
         write(file, source)
         flush(file)
-        run_lint(tmp_file_name; server, io, lint_options, filters)
+        run_lint(tmp_file_name; server, io, filters, formatter)
     end
 end

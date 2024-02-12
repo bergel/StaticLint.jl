@@ -1,5 +1,5 @@
 using StaticLint: StaticLint, run_lint_on_text, comp, convert_offset_to_line,
-    convert_offset_to_line_from_lines, should_be_filtered
+    convert_offset_to_line_from_lines, should_be_filtered, MarkdownFormat, PlainFormat
 import CSTParser
 using Test
 
@@ -190,4 +190,41 @@ end
 
     @test should_be_filtered(hint_as_string1, filters)
     @test !should_be_filtered(hint_as_string2, filters)
+end
+
+@testset "Formatter" begin
+    source = """
+           const x = Threads.nthreads()
+           function f()
+               return x
+           end
+           """
+
+    @testset "Plain" begin
+        io = IOBuffer()
+        run_lint_on_text(source; io=io)
+        result = String(take!(io))
+
+        expected = r"""
+            ----------
+            Line 1, column 11: Threads.nthreads\(\) should not be used in a constant variable\. at offset 10 of \H+
+            Line 1, column 11: Missing reference at offset 10 of \H+
+            2 potential threats were found
+            ----------
+            """
+        @test !isnothing(match(expected, result))
+    end
+
+    @testset "Markdown" begin
+        io = IOBuffer()
+        run_lint_on_text(source; io=io, formatter=MarkdownFormat())
+        result = String(take!(io))
+
+        expected = r"""
+             - Line 1, column 11: Threads.nthreads\(\) should not be used in a constant variable\. at offset 10 of \H+
+             - Line 1, column 11: Missing reference at offset 10 of \H+
+            2 potential threats were found
+            """
+        @test !isnothing(match(expected, result))
+    end
 end
