@@ -203,7 +203,10 @@ function print_footer(::PlainFormat, io::IO)
     printstyled(io, "-" ^ 10 * "\n", color=:blue)
 end
 
-print_header(::MarkdownFormat, io::IO) = nothing
+function print_header(::MarkdownFormat, io::IO)
+    print(io, "**Result of the Lint Static Analyzer:**")
+end
+
 print_footer(::MarkdownFormat, io::IO) = nothing
 function print_hint(::MarkdownFormat, io::IO, coordinates::String, hint::String)
     print(io, " - **$coordinates** $hint\n")
