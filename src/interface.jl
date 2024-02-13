@@ -205,7 +205,7 @@ function print_footer(::PlainFormat, io::IO)
 end
 
 function print_header(::MarkdownFormat, io::IO)
-    println(io, "**Result of the Lint Static Analyzer:**")
+    println(io, "**Result of the Lint Static Analyzer ($(now())):**")
 end
 
 print_footer(::MarkdownFormat, io::IO) = nothing
