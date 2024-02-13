@@ -214,6 +214,8 @@ function print_hint(::MarkdownFormat, io::IO, coordinates::String, hint::String)
 end
 
 function print_summary(::MarkdownFormat, io::IO, nb_hints::Int64)
+    println(io)
+    println(io)
     if iszero(nb_hints)
         print(io, "🎉No potential threats were found.👍\n")
     else
