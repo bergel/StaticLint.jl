@@ -171,7 +171,6 @@ function _run_lint_on_dir(
         for file in files
             filename = joinpath(root, file)
             if endswith(filename, ".jl")
-                println(io, "Running lint on file in $filename")
                 run_lint(filename; server, io, filters, formatter)
             end
         end
@@ -182,8 +181,8 @@ function _run_lint_on_dir(
     end
 end
 
-function print_header(::PlainFormat, io::IO)
-    printstyled(io, "-" ^ 10 * "\n", color=:blue)
+function print_header(::PlainFormat, io::IO, rootpath::String)
+    printstyled(io, "-" ^ 10 * " $(rootpath)\n", color=:blue)
 end
 
 function print_hint(::PlainFormat, io::IO, coordinates::String, hint::String)
@@ -206,8 +205,8 @@ function print_footer(::PlainFormat, io::IO)
     printstyled(io, "-" ^ 10 * "\n", color=:blue)
 end
 
-function print_header(::MarkdownFormat, io::IO)
-    println(io, "**Result of the Lint Static Analyzer ($(now())):**")
+function print_header(::MarkdownFormat, io::IO, rootpath::String)
+    println(io, "**Result of the Lint Static Analyzer ($(now())) on $(rootpath):**")
 end
 
 print_footer(::MarkdownFormat, io::IO) = nothing
@@ -251,7 +250,7 @@ function run_lint(
     # We are running Lint on a Julia file
     _,hints = StaticLint.lint_file(rootpath, server; gethints = true)
 
-    print_header(formatter, io)
+    print_header(formatter, io, rootpath)
 
     filtered_and_printed_hints = filter(h->filter_and_print_hint(h[2], io, filters, formatter), hints)
 

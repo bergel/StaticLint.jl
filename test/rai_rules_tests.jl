@@ -206,7 +206,7 @@ end
         result = String(take!(io))
 
         expected = r"""
-            ----------
+            ---------- \H+
             Line 1, column 11: Threads.nthreads\(\) should not be used in a constant variable\. at offset 10 of \H+
             Line 1, column 11: Missing reference at offset 10 of \H+
             2 potential threats are found
@@ -221,7 +221,7 @@ end
         result = String(take!(io))
 
         expected = r"""
-            ----------
+            ---------- \H+
             Line 1, column 11: Threads.nthreads\(\) should not be used in a constant variable\. at offset 10 of \H+
             1 potential threat is found
             ----------
