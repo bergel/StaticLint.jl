@@ -247,6 +247,10 @@ function run_lint(
     # If we are running Lint on a directory
     isdir(rootpath) && return _run_lint_on_dir(rootpath; server, io, filters, formatter)
 
+    # Check if we have to be run on a Julia file. Simply exit if not.
+    # This simplify the amount of work in GitHub Action
+    endswith(rootpath, ".jl") || return
+
     # We are running Lint on a Julia file
     _,hints = StaticLint.lint_file(rootpath, server; gethints = true)
 
