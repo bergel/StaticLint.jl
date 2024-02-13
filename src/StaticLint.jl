@@ -401,4 +401,7 @@ include("linting/checks.jl")
 include("type_inf.jl")
 include("utils.jl")
 include("interface.jl")
+
+export MarkdownFormat, PlainFormat
+export run_lint
 end
