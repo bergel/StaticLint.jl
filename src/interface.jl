@@ -162,19 +162,20 @@ function _run_lint_on_dir(
     rootpath::String;
     server = global_server,
     io::IO=stdout,
-    filters::Vector{LintCodes}=essential_filters
+    filters::Vector{LintCodes}=essential_filters,
+    formatter::AbstractFormatter=PlainFormat()
 )
     for (root, dirs, files) in walkdir(rootpath)
         for file in files
             filename = joinpath(root, file)
             if endswith(filename, ".jl")
-                println("Running lint on file in $filename")
-                run_lint(filename; server, io, filters)
+                println(io, "Running lint on file in $filename")
+                run_lint(filename; server, io, filters, formatter)
             end
         end
 
         for dir in dirs
-            _run_lint_on_dir(joinpath(root, dir); server, io, filters)
+            _run_lint_on_dir(joinpath(root, dir); server, io, filters, formatter)
         end
     end
 end
@@ -183,7 +184,7 @@ function print_header(::PlainFormat, io::IO)
     printstyled(io, "-" ^ 10 * "\n", color=:blue)
 end
 
-function print_hint(::PlainFormat, io::IOBuffer, coordinates::String, hint::String)
+function print_hint(::PlainFormat, io::IO, coordinates::String, hint::String)
     printstyled(io, coordinates, color=:green)
     print(io, " ")
     println(io, hint)
@@ -241,7 +242,7 @@ function run_lint(
     rootpath in keys(server.files) && return
 
     # If we are running Lint on a directory
-    isdir(rootpath) && return _run_lint_on_dir(rootpath; server, io, filters)
+    isdir(rootpath) && return _run_lint_on_dir(rootpath; server, io, filters, formatter)
 
     # We are running Lint on a Julia file
     _,hints = StaticLint.lint_file(rootpath, server; gethints = true)

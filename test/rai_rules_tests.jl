@@ -254,3 +254,27 @@ end
         @test !isnothing(match(expected, result))
     end
 end
+
+@testset "Running on a directory" begin
+    @testset "Non empty directory" begin
+        formatters = [StaticLint.PlainFormat(), StaticLint.MarkdownFormat()]
+        for formatter in formatters
+            mktempdir() do dir
+                open(joinpath(dir, "foo.jl"), "w") do io
+                    str = IOBuffer()
+                    write(io, "function f()\n  @async 1 + 1\nend\n")
+                    flush(io)
+                    StaticLint.run_lint(dir; io=str, formatter)
+                end
+            end
+        end
+        @test true
+    end
+
+    @testset "Empty directory" begin
+        mktempdir() do dir
+                StaticLint.run_lint(dir)
+        end
+        @test true
+    end
+end
