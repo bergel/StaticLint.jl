@@ -281,7 +281,6 @@ end
 
                         🎉No potential threats were found.👍
                         """
-                    # isdefined(Main, :Infiltrator) && Main.infiltrate(@__MODULE__, Base.@locals, @__FILE__, @__LINE__)
                     @test !isnothing(match(expected, result))
                 end
             end
