@@ -255,15 +255,84 @@ end
     end
 end
 
+@testset "Linting multiple files" begin
+    @testset "No errors" begin
+        mktempdir() do dir
+            open(joinpath(dir, "foo.jl"), "w") do io1
+                open(joinpath(dir, "bar.jl"), "w") do io2
+                    write(io1, "function f()\n  @spawn 1 + 1\nend\n")
+                    write(io2, "function g()\n  @spawn 1 + 1\nend\n")
+
+                    flush(io1)
+                    flush(io2)
+
+                    str = IOBuffer()
+                    StaticLint.run_lint(dir; io=str, formatter=StaticLint.MarkdownFormat())
+
+                    result = String(take!(str))
+
+                    expected = r"""
+                        \*\*Result of the Lint Static Analyzer (\H+) on file \H+:\*\*
+
+
+                        🎉No potential threats were found.👍
+                        \*\*Result of the Lint Static Analyzer (\H+) on file \H+:\*\*
+
+
+                        🎉No potential threats were found.👍
+                        """
+                    # isdefined(Main, :Infiltrator) && Main.infiltrate(@__MODULE__, Base.@locals, @__FILE__, @__LINE__)
+                    @test !isnothing(match(expected, result))
+                end
+            end
+        end
+        @test true
+    end
+
+    @testset "Two files with errors" begin
+        mktempdir() do dir
+            open(joinpath(dir, "foo.jl"), "w") do io1
+                open(joinpath(dir, "bar.jl"), "w") do io2
+                    write(io1, "function f()\n  @async 1 + 1\nend\n")
+                    write(io2, "function g()\n  @async 1 + 1\nend\n")
+
+                    flush(io1)
+                    flush(io2)
+
+                    str = IOBuffer()
+                    StaticLint.run_lint(dir; io=str, formatter=StaticLint.MarkdownFormat())
+
+                    result = String(take!(str))
+
+                    expected = r"""
+                        \*\*Result of the Lint Static Analyzer (\H+) on file \H+:\*\*
+                         - \*\*Line 2, column 3:\*\* Macro @spawn should be used instead of @async. at offset 15 of \H+
+
+
+                        🚨\*\*1 potential threat is found\*\*🚨
+                        \*\*Result of the Lint Static Analyzer (\H+) on file \H+:\*\*
+                         - \*\*Line 2, column 3:\*\* Macro @spawn should be used instead of @async. at offset 15 of \H+
+
+
+                        🚨\*\*1 potential threat is found\*\*🚨
+                        """
+                    @test !isnothing(match(expected, result))
+                end
+            end
+        end
+        @test true
+    end
+end
+
 @testset "Running on a directory" begin
     @testset "Non empty directory" begin
         formatters = [StaticLint.PlainFormat(), StaticLint.MarkdownFormat()]
         for formatter in formatters
             mktempdir() do dir
                 open(joinpath(dir, "foo.jl"), "w") do io
-                    str = IOBuffer()
                     write(io, "function f()\n  @async 1 + 1\nend\n")
                     flush(io)
+                    str = IOBuffer()
                     StaticLint.run_lint(dir; io=str, formatter)
                 end
             end
