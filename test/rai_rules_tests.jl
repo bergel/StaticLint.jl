@@ -200,30 +200,56 @@ end
            end
            """
 
-    @testset "Plain" begin
+    @testset "Plain 01" begin
         io = IOBuffer()
-        run_lint_on_text(source; io=io)
+        run_lint_on_text(source; io=io, filters=StaticLint.no_filters)
         result = String(take!(io))
 
         expected = r"""
             ----------
             Line 1, column 11: Threads.nthreads\(\) should not be used in a constant variable\. at offset 10 of \H+
             Line 1, column 11: Missing reference at offset 10 of \H+
-            2 potential threats were found
+            2 potential threats are found
             ----------
             """
         @test !isnothing(match(expected, result))
     end
 
-    @testset "Markdown" begin
+    @testset "Plain 02" begin
         io = IOBuffer()
-        run_lint_on_text(source; io=io, formatter=MarkdownFormat())
+        run_lint_on_text(source; io=io, filters=StaticLint.essential_filters)
         result = String(take!(io))
 
         expected = r"""
-             - Line 1, column 11: Threads.nthreads\(\) should not be used in a constant variable\. at offset 10 of \H+
-             - Line 1, column 11: Missing reference at offset 10 of \H+
-            2 potential threats were found
+            ----------
+            Line 1, column 11: Threads.nthreads\(\) should not be used in a constant variable\. at offset 10 of \H+
+            1 potential threat is found
+            ----------
+            """
+        @test !isnothing(match(expected, result))
+    end
+
+    @testset "Markdown 01" begin
+        io = IOBuffer()
+        run_lint_on_text(source; io=io, filters=StaticLint.no_filters, formatter=MarkdownFormat())
+        result = String(take!(io))
+
+        expected = r"""
+             - \*\*Line 1, column 11:\*\* Threads.nthreads\(\) should not be used in a constant variable\. at offset 10 of \H+
+             - \*\*Line 1, column 11:\*\* Missing reference at offset 10 of \H+
+            🚨\*\*2 potential threats are found\*\*🚨
+            """
+        @test !isnothing(match(expected, result))
+    end
+
+    @testset "Markdown 02" begin
+        io = IOBuffer()
+        run_lint_on_text(source; io=io, filters=StaticLint.essential_filters, formatter=MarkdownFormat())
+        result = String(take!(io))
+
+        expected = r"""
+             - \*\*Line 1, column 11:\*\* Threads.nthreads\(\) should not be used in a constant variable\. at offset 10 of \H+
+            🚨\*\*1 potential threat is found\*\*🚨
             """
         @test !isnothing(match(expected, result))
     end

@@ -73,6 +73,10 @@ end
 global global_server = setup_server()
 const essential_options = LintOptions(true, false, true, true, true, true, true, true, true, false, true)
 
+const no_filters = LintCodes[]
+const essential_filters = [no_filters; [StaticLint.MissingReference]]
+
+
 # Return (line, column) for a given offset in a source
 function convert_offset_to_line_from_filename(offset::Int64, filename::String)
     all_lines = open(io->readlines(io), filename)
@@ -91,7 +95,6 @@ function convert_offset_to_line_from_lines(offset::Int64, all_lines)
     annotation_previous_line = -1
     annotation = nothing
     for (index_line,line) in enumerate(all_lines)
-        # printstyled("$offset in $(current_index):$(current_index + length(line)) , $index_line\n", color=:purple)
         if endswith(line, "lint-disable-next-line")
             annotation_previous_line = index_line+1
         end
@@ -102,7 +105,6 @@ function convert_offset_to_line_from_lines(offset::Int64, all_lines)
             else
                 annotation = nothing
             end
-            # isdefined(Main, :Infiltrator) && Main.infiltrate(@__MODULE__, Base.@locals, @__FILE__, @__LINE__)
             result = index_line, (offset - current_index + 1), annotation
             annotation = nothing
             return result
@@ -156,7 +158,12 @@ function filter_and_print_hint(hint_as_string::String, io::IO=stdout, filters::V
 end
 
 
-function _run_lint_on_dir(rootpath::String; server = global_server, io::IO=stdout, filters::Vector{LintCodes}=LintCodes[])
+function _run_lint_on_dir(
+    rootpath::String;
+    server = global_server,
+    io::IO=stdout,
+    filters::Vector{LintCodes}=essential_filters
+)
     for (root, dirs, files) in walkdir(rootpath)
         for file in files
             filename = joinpath(root, file)
@@ -186,7 +193,9 @@ function print_summary(::PlainFormat, io::IO, nb_hints::Int64)
     if iszero(nb_hints)
         printstyled(io, "No potential threats were found.\n", color=:green)
     else
-        printstyled(io, "$(nb_hints) potential threats were found\n", color=:red)
+
+        plural = nb_hints > 1 ? "s are" : " is"
+        printstyled(io, "$(nb_hints) potential threat$(plural) found\n", color=:red)
     end
 end
 
@@ -197,14 +206,15 @@ end
 print_header(::MarkdownFormat, io::IO) = nothing
 print_footer(::MarkdownFormat, io::IO) = nothing
 function print_hint(::MarkdownFormat, io::IO, coordinates::String, hint::String)
-    print(io, " - $coordinates $hint\n")
+    print(io, " - **$coordinates** $hint\n")
 end
 
 function print_summary(::MarkdownFormat, io::IO, nb_hints::Int64)
     if iszero(nb_hints)
-        print(io, "No potential threats were found.\n")
+        print(io, "🎉No potential threats were found.👍\n")
     else
-        print(io, "$(nb_hints) potential threats were found\n")
+        plural = nb_hints > 1 ? "s are" : " is"
+        print(io, "🚨**$(nb_hints) potential threat$(plural) found**🚨\n")
     end
 end
 
@@ -217,7 +227,13 @@ Example of use:
     StaticLint.run_lint("foo/bar/myfile.jl")
 
 """
-function run_lint(rootpath::String; server = global_server, io::IO=stdout, filters::Vector{LintCodes}=LintCodes[], formatter::AbstractFormatter=PlainFormat())
+function run_lint(
+    rootpath::String;
+    server = global_server,
+    io::IO=stdout,
+    filters::Vector{LintCodes}=essential_filters,
+    formatter::AbstractFormatter=PlainFormat()
+)
     # Did we already analyzed this file? If yes, then exit.
     rootpath in keys(server.files) && return
 
@@ -235,7 +251,13 @@ function run_lint(rootpath::String; server = global_server, io::IO=stdout, filte
     print_footer(formatter, io)
 end
 
-function run_lint_on_text(source::String; server = global_server, io::IO=stdout, filters::Vector{LintCodes}=LintCodes[], formatter::AbstractFormatter=PlainFormat())
+function run_lint_on_text(
+    source::String;
+    server = global_server,
+    io::IO=stdout,
+    filters::Vector{LintCodes}=essential_filters,
+    formatter::AbstractFormatter=PlainFormat()
+)
     tmp_file_name = tempname()
     open(tmp_file_name, "w") do file
         write(file, source)
