@@ -269,7 +269,7 @@ function run_lint_on_text(
     filters::Vector{LintCodes}=essential_filters,
     formatter::AbstractFormatter=PlainFormat()
 )
-    tmp_file_name = tempname()
+    tmp_file_name = tempname() * ".jl"
     open(tmp_file_name, "w") do file
         write(file, source)
         flush(file)
