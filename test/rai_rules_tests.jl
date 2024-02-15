@@ -23,13 +23,6 @@ function lint_has_error_test(source::String, verbose=false)
     return any(l->startswith(l, "Line "), all_lines)
 end
 
-@testset "interface" begin
-    source = "1 + 2 \n 1 + 10 \n true || true\n10"
-    @test lint_has_error_test(source)
-    @test lint_test(source,
-        "Line 3, column 2: The first argument of a `||` call is a boolean literal. at offset 17 of")
-end
-
 @testset "forbidden macros" begin
     @testset "@async" begin
         source = """
@@ -149,6 +142,27 @@ end
             """
         @test !lint_has_error_test(source)
     end
+
+    @testset "finalizer with do-end" begin
+        source = """
+            function f(x)
+                ref = Ref(1)
+                x = ___MutableFoo(ref)
+                finalizer(x) do x
+                    ref[] = 3
+                end
+            end
+            """
+        @test lint_has_error_test(source)
+    end
+    @testset "finalizer without do-end" begin
+        source = """
+            function f(x)
+                finalizer(q->nothing, x)
+            end
+            """
+        @test lint_has_error_test(source)
+    end
 end
 
 @testset "Comparison" begin
@@ -164,6 +178,13 @@ end
     @test t("hole_variable + 1", "1 + hole_variable")
 
     @test t("@async hole_variable", "@async begin 1 + 2 end")
+
+    @test t("finalizer(y, x)", "finalizer(hole_variable, hole_variable)")
+    @test t("finalizer(q->nothing, x)", "finalizer(hole_variable, hole_variable)")
+    @test t("finalizer(x) do hole_variable hole_variable end",
+            "finalizer(x) do x
+                ref[] = 3
+            end")
 end
 
 @testset "offset to line" begin

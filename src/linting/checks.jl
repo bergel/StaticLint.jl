@@ -36,6 +36,7 @@
     ProhibitedAsyncMacro,
     ProhibitedNThreads,
     MissingReference,
+    ProhibitedFinalizer,
 )
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
@@ -73,6 +74,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     ProhibitedAsyncMacro => "Macro @spawn should be used instead of @async.",
     ProhibitedNThreads => "Threads.nthreads() should not be used in a constant variable.",
     MissingReference => "Missing reference",
+    ProhibitedFinalizer => "finalize(_,_) should not be used",
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -130,6 +132,7 @@ function check_all(x::EXPR, opts::LintOptions, env::ExternalEnv, markers::Dict{S
     if opts.extended
         check_async(x)
         check_nthreads(x, markers)
+        check_finalizer(x)
     end
 
     if x.args !== nothing
@@ -165,11 +168,19 @@ function generic_check(x::EXPR, template_code::String, error_value)
     end
 end
 
+
+function check_finalizer(x::EXPR)
+    # isdefined(Main, :Infiltrator) && Main.infiltrate(@__MODULE__, Base.@locals, @__FILE__, @__LINE__)
+    generic_check(x, "finalizer(hole_variable, hole_variable)", ProhibitedFinalizer)
+    generic_check(x, "finalizer(x) do hole_variable hole_variable end", ProhibitedFinalizer)
+end
 check_async(x::EXPR) = generic_check(x, "@async hole_variable", ProhibitedAsyncMacro)
 function check_nthreads(x::EXPR, markers::Dict{Symbol,Symbol})
     haskey(markers, :const) || return
     generic_check(x, "Threads.nthreads()", ProhibitedNThreads)
 end
+
+
 
 function _typeof(x, state)
     if x isa EXPR
