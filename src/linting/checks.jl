@@ -37,6 +37,7 @@
     ProhibitedNThreads,
     MissingReference,
     ProhibitedFinalizer,
+    ProhibitedCCall,
 )
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
@@ -74,7 +75,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     ProhibitedAsyncMacro => "Macro @spawn should be used instead of @async.",
     ProhibitedNThreads => "Threads.nthreads() should not be used in a constant variable.",
     MissingReference => "Missing reference",
-    ProhibitedFinalizer => "finalize(_,_) should not be used",
+    ProhibitedFinalizer => "finalize(_,_) should not be used.",
+    ProhibitedCCall => "ccall should not be used."
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -133,6 +135,7 @@ function check_all(x::EXPR, opts::LintOptions, env::ExternalEnv, markers::Dict{S
         check_async(x)
         check_nthreads(x, markers)
         check_finalizer(x)
+        check_ccall(x)
     end
 
     if x.args !== nothing
@@ -147,16 +150,38 @@ function check_all(x::EXPR, opts::LintOptions, env::ExternalEnv, markers::Dict{S
 end
 
 function is_hole_variable(x::CSTParser.EXPR)
-    return x.head == :IDENTIFIER && x.val == "hole_variable"
+    return x.head == :IDENTIFIER && x.val in ["hole_variable", "hole_variable_star"]
+end
+
+function is_hole_variable_star(x::CSTParser.EXPR)
+    return x.head == :IDENTIFIER && x.val == "hole_variable_star"
 end
 
 comp(x, y) = x == y
 function comp(x::CSTParser.EXPR, y::CSTParser.EXPR)
     (is_hole_variable(x) || is_hole_variable(y)) && return true
-    return comp(x.head, y.head) &&
-        x.val == y.val &&
-        length(x) == length(y) &&
-        all(comp(x[i], y[i]) for i = 1:length(x))
+
+    result = comp(x.head, y.head) && x.val == y.val
+    !result && return false
+
+    min_length = min(length(x), length(y))
+
+    for i in 1:min_length
+        comp(x[i], y[i]) || return false
+        (is_hole_variable_star(x[i]) || is_hole_variable_star(y[i])) && return true
+    end
+
+    length(x) == length(y) && return true
+
+    if length(x) == min_length
+        return is_hole_variable_star(y[min_length + 1])
+    end
+
+    if length(y) == min_length
+        return is_hole_variable_star(x[min_length + 1])
+    end
+
+    return false
 end
 
 const check_cache = Dict{String, CSTParser.EXPR}()
@@ -175,6 +200,8 @@ function check_finalizer(x::EXPR)
     generic_check(x, "finalizer(x) do hole_variable hole_variable end", ProhibitedFinalizer)
 end
 check_async(x::EXPR) = generic_check(x, "@async hole_variable", ProhibitedAsyncMacro)
+check_ccall(x::EXPR) = generic_check(x, "ccall(hole_variable, hole_variable, hole_variable, hole_variable_star)", ProhibitedCCall)
+
 function check_nthreads(x::EXPR, markers::Dict{Symbol,Symbol})
     haskey(markers, :const) || return
     generic_check(x, "Threads.nthreads()", ProhibitedNThreads)

@@ -163,6 +163,32 @@ end
             """
         @test lint_has_error_test(source)
     end
+
+    @testset "ccall" begin
+        source = """
+            function rusage(who:: RUsageWho = RUSAGE_SELF)
+                ru = Vector{RUsage}(undef, 1)
+                ccall(:getrusage, Cint, (Cint, Ptr{Cvoid}), who, ru)
+                return ru[1]
+            end
+            """
+        @test lint_has_error_test(source)
+    end
+
+    @testset "ccall 02" begin
+        source = """
+            function _pread_async!(fd::Integer, buffer::Ptr{UInt8}, count::Integer, offset::Integer)::UInt64
+                uv_filesystem_request, uv_buffer_descriptor = _prepare_libuv_async_call(buffer, count)
+
+                ccall(:uv_fs_read, Int32,
+                            (Ptr{Cvoid}, Ptr{Cvoid}, Int32, Ptr{Cvoid}, UInt32, Int64, Ptr{Cvoid}),
+                            Base.eventloop(), uv_filesystem_request, fd, uv_buffer_descriptor, UInt32(1), offset,
+                            @cfunction(_readwrite_cb, Cvoid, (Ptr{Cvoid}, ))
+                            )
+            end
+            """
+        @test lint_has_error_test(source)
+    end
 end
 
 @testset "Comparison" begin
@@ -185,6 +211,19 @@ end
             "finalizer(x) do x
                 ref[] = 3
             end")
+
+    @test !t("foo()", "foo(hole_variable)")
+    @test !t("foo()", "foo(x)")
+
+    @test t("foo(x, y)", "foo(hole_variable, hole_variable)")
+    @test !t("foo(x, y, z)", "foo(hole_variable, hole_variable)")
+    @test t("foo(x, y, z)", "foo(hole_variable, hole_variable_star)")
+
+    @test t("foo(x, y, z)", "foo(hole_variable_star)")
+
+    # Ideally, the next line should pass.
+    # @test t("foo(x, y, z)", "foo(hole_variable, hole_variable, hole_variable, hole_variable_star)")
+
 end
 
 @testset "offset to line" begin
