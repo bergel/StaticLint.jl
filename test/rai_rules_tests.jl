@@ -23,6 +23,12 @@ function lint_has_error_test(source::String, verbose=false)
     return any(l->startswith(l, "Line "), all_lines)
 end
 
+# FOR FUTURE WORK
+# @testset "string interpolation" begin
+#     source = raw"""$(@async 1 + 2)"""
+#     @test lint_has_error_test(source)
+# end
+
 @testset "forbidden macros" begin
     @testset "@async" begin
         source = """
@@ -154,6 +160,9 @@ end
             end
             """
         @test lint_has_error_test(source)
+        @test lint_test(source,
+            "Line 4, column 5: finalize(_,_) should not be used.")
+
     end
     @testset "finalizer without do-end" begin
         source = """
@@ -162,6 +171,8 @@ end
             end
             """
         @test lint_has_error_test(source)
+        @test lint_test(source,
+            "Line 2, column 5: finalize(_,_) should not be used.")
     end
 
     @testset "ccall" begin
@@ -173,6 +184,8 @@ end
             end
             """
         @test lint_has_error_test(source)
+        @test lint_test(source,
+            "Line 3, column 5: ccall should not be used.")
     end
 
     @testset "ccall 02" begin
@@ -188,7 +201,49 @@ end
             end
             """
         @test lint_has_error_test(source)
+        @test lint_test(source,
+            "Line 4, column 5: ccall should not be used.")
     end
+
+    @testset "pointer_from_objref 01" begin
+        source = """
+            function f(x)
+                return pointer_from_objref(v)
+            end
+            """
+        @test lint_has_error_test(source)
+        @test lint_test(source,
+            "Line 2, column 12: pointer_from_objref should not be used.")
+    end
+
+    @testset "pointer_from_objref 02" begin
+        source = """
+            function _reinterpret_with_size0(::Type{T1}, value::T2; checked::Bool=true) where {T1<:Tuple,T2<:Tuple}
+                checked && _check_valid_reinterpret_with_size0(T1, T2)
+                v = Ref(value)
+                GC.@preserve v begin
+                    ptr = pointer_from_objref(v)
+                    return Base.unsafe_load(reinterpret(Ptr{T1}, ptr))
+                end
+            end
+            """
+        @test lint_has_error_test(source)
+        @test lint_test(source,
+            "Line 5, column 15: pointer_from_objref should not be used.")
+    end
+
+    @testset "pointer_from_objref 03" begin
+        source = raw"""
+            function vertex_name(c::Any)
+                return "v$(UInt64(pointer_from_objref(c)))"
+            end
+            """
+        @test lint_has_error_test(source)
+        @test lint_test(source,
+            "Line 2, column 23: pointer_from_objref should not be used")
+    end
+
+
 end
 
 @testset "Comparison" begin

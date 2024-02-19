@@ -38,6 +38,7 @@
     MissingReference,
     ProhibitedFinalizer,
     ProhibitedCCall,
+    ProhibitedPointerFromObjref,
 )
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
@@ -76,7 +77,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     ProhibitedNThreads => "Threads.nthreads() should not be used in a constant variable.",
     MissingReference => "Missing reference",
     ProhibitedFinalizer => "finalize(_,_) should not be used.",
-    ProhibitedCCall => "ccall should not be used."
+    ProhibitedCCall => "ccall should not be used.",
+    ProhibitedPointerFromObjref => "pointer_from_objref should not be used.",
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -136,6 +138,7 @@ function check_all(x::EXPR, opts::LintOptions, env::ExternalEnv, markers::Dict{S
         check_nthreads(x, markers)
         check_finalizer(x)
         check_ccall(x)
+        check_pointer_from_objref(x)
     end
 
     if x.args !== nothing
@@ -195,12 +198,12 @@ end
 
 
 function check_finalizer(x::EXPR)
-    # isdefined(Main, :Infiltrator) && Main.infiltrate(@__MODULE__, Base.@locals, @__FILE__, @__LINE__)
     generic_check(x, "finalizer(hole_variable, hole_variable)", ProhibitedFinalizer)
     generic_check(x, "finalizer(x) do hole_variable hole_variable end", ProhibitedFinalizer)
 end
 check_async(x::EXPR) = generic_check(x, "@async hole_variable", ProhibitedAsyncMacro)
 check_ccall(x::EXPR) = generic_check(x, "ccall(hole_variable, hole_variable, hole_variable, hole_variable_star)", ProhibitedCCall)
+check_pointer_from_objref(x::EXPR) = generic_check(x, "pointer_from_objref(hole_variable)", ProhibitedPointerFromObjref)
 
 function check_nthreads(x::EXPR, markers::Dict{Symbol,Symbol})
     haskey(markers, :const) || return
